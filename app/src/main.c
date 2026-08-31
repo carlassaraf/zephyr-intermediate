@@ -7,22 +7,6 @@
  * polling_thread wakes every 10ms to check a flag.
  * sensor_sim fires every 100ms - that's 10 wasted wake-ups per event.
  *
- *
- * ================================================================
- * TASKS
- * ================================================================
- *
- * TASK 3 (verify):
- *   Add k_uptime_get_32() to your handler's LOG_INF.
- *   Confirm handler runs only when sensor_sim fires (every ~100ms).
- *   No unnecessary wake-ups.
- *
- * BONUS (debounce):
- *   Change sensor_sim to fire 5 events within 20ms (not 1 per 100ms).
- *   Use k_work_reschedule with 30ms delay so only ONE handler
- *   call occurs after the burst - not 5.
- *   Log the reschedule timestamps to confirm the burst collapses.
- *
  * ================================================================
  */
 
@@ -45,7 +29,7 @@ static int total_processed;
 
 /* Define k_work */
 static void sensor_handler(struct k_work *work);
-K_WORK_DEFINE(sensor_work, sensor_handler);
+K_WORK_DELAYABLE_DEFINE(debounce_work, sensor_handler);
 
 /* ------------------------------------------------------------------ */
 /*  sensor_sim - fires EVENT_COUNT events, 100ms apart               */
@@ -56,15 +40,18 @@ static void sensor_sim_fn(void *p1, void *p2, void *p3)
     for (int i = 0; i < EVENT_COUNT; i++) {
         k_msleep(SENSOR_MS);
 
-        total_events++;
-        LOG_INF("[SENSOR] event %d  tick=%u", i, k_uptime_get_32());
+        for (int j = 0; j < 5; j++) {
+            
+            total_events++;
+            LOG_INF("[SENSOR] event %d  tick=%u", (i * 5) + j, k_uptime_get_32());
 
-        /*
-         * Submit deffered work
-         */
-        int ret = k_work_submit(&sensor_work);
-        if (ret < 0) {
-            LOG_ERR("submit failed: %d", ret);
+            /*
+            * Submit deffered work
+            */
+            int ret = k_work_reschedule(&debounce_work, K_MSEC(30));
+            if (ret < 0) {
+                LOG_ERR("submit failed: %d", ret);
+            }
         }
 
         /*
@@ -86,13 +73,6 @@ static void sensor_handler(struct k_work *work)
 
 /* Producer thread */
 K_THREAD_DEFINE(sensor_thread, STACK_SIZE, sensor_sim_fn, NULL, NULL, NULL, 5, 0, 0);
-
-/* ================================================================
- * BONUS PLACEHOLDER - for debounce:
- *
- * K_WORK_DELAYABLE_DEFINE(debounce_work, sensor_handler);
- * In sensor_sim: k_work_reschedule(&debounce_work, K_MSEC(30));
- * ================================================================ */
 
 int main(void)
 {
