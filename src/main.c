@@ -29,7 +29,10 @@ static void parser_entry(void *attack_index, void *p2, void *p3)
 	}
 }
 
-/* Starts the parser thread. */
+/*
+ * Starts the parser thread in user mode (K_USER). It parses untrusted input, so
+ * the MPU only lets it access its own stack and flash, not the device key in RAM.
+ */
 int main(void)
 {
 	/* The attacker would compute this index from the firmware's ELF file. */
@@ -38,6 +41,6 @@ int main(void)
 
 	k_thread_create(&parser_thread, parser_stack, PARSER_STACK_SIZE,
 			parser_entry, (void *)attack_index, NULL, NULL,
-			5, 0, K_NO_WAIT);
+			5, K_USER, K_NO_WAIT);
 	return 0;
 }
